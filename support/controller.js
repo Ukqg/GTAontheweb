@@ -25,16 +25,21 @@
     function apply(next) {
       for (const code of new Set([...owned, ...next.keys])) if (VK[code]) Atomics.store(keys, VK[code], physical.has(code) || next.keys.has(code) ? 128 : 0);
       owned = next.keys;
+      for (const name of ['Shift', 'Control', 'Alt']) if (VK[name]) {
+        const down = ['Left', 'Right'].some(side => physical.has(name + side) || owned.has(name + side));
+        Atomics.store(keys, VK[name], down ? 128 : 0);
+      }
       const current = Atomics.load(w, 5);
       Atomics.store(w, 5, (current & ~ownedMouse) | physicalMouse | next.mouse);
       ownedMouse = next.mouse;
     }
     const empty = () => ({keys:new Set(), mouse:0});
-    addEventListener('keydown', e => { if (e.isTrusted) physical.add(e.code); }, true);
+    addEventListener('keydown', e => { if (e.isTrusted && !e.target?.closest?.('input, textarea, select, [contenteditable="true"]')) physical.add(e.code); }, true);
     addEventListener('keyup', e => { if (e.isTrusted) physical.delete(e.code); }, true);
     canvas.addEventListener('mousedown', e => { if (e.isTrusted) physicalMouse |= 1 << [0,2,1,3,4][e.button]; }, true);
     addEventListener('mouseup', e => { if (e.isTrusted) physicalMouse &= ~(1 << [0,2,1,3,4][e.button]); }, true);
-    const release = () => { physical.clear(); physicalMouse = 0; apply(empty()); remainderX = remainderY = 0; };
+    const release = () => { physical.clear(); physicalMouse = 0; globalThis.PlayGTA5Touch?.release(); apply(empty()); remainderX = remainderY = 0; };
+    document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== canvas) release(); });
     addEventListener('blur', release); document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
     function tick(now) {
       const dt = Math.min(.05, Math.max(0, (now - (last || now)) / 1000)); last = now;
