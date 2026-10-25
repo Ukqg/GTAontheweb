@@ -209,7 +209,10 @@ not install assets or write a readiness receipt.
 ### Validation and operating notes
 
 Run `npm run test:assets` for storage delivery, byte ranges, conditional requests,
-readiness, and failure behavior. `node tests/test_chunk_fetch.cjs` validates the
+readiness, and failure behavior. `npm run test:launcher` checks the ready-storage launch path and missing-storage
+error. `npm run test:input` checks keyboard modifiers, aircraft aliases, physical/virtual
+input overlap, and input release when focus or pointer lock changes.
+`node tests/test_chunk_fetch.cjs` validates the
 browser's chunk reconstruction and streaming WebAssembly behavior.
 `node scripts/verify-game-storage.mjs` reads the completion receipt, reconstructs
 the entire stored WebAssembly engine and checks its original SHA-256 hash, then

@@ -520,7 +520,7 @@ const VK = {
 	Backspace: 0x08, Tab: 0x09, Enter: 0x0D, NumpadEnter: 0xFD, Pause: 0x13, CapsLock: 0x14, Escape: 0x1B, Space: 0x20, PageUp: 0x21, PageDown: 0x22,
 	End: 0x23, Home: 0x24, ArrowLeft: 0x25, ArrowUp: 0x26, ArrowRight: 0x27, ArrowDown: 0x28, PrintScreen: 0x2C, Insert: 0x2D, Delete: 0x2E,
 	MetaLeft: 0x5B, MetaRight: 0x5C, ContextMenu: 0x5D, NumpadMultiply: 0x6A, NumpadAdd: 0x6B, NumpadSubtract: 0x6D, NumpadDecimal: 0x6E, NumpadDivide: 0x6F,
-	NumLock: 0x90, ScrollLock: 0x91, ShiftLeft: 0xA0, ShiftRight: 0xA1, ControlLeft: 0xA2, ControlRight: 0xA3, AltLeft: 0xA4, AltRight: 0xA5,
+	NumLock: 0x90, ScrollLock: 0x91, Shift: 0x10, Control: 0x11, Alt: 0x12, ShiftLeft: 0xA0, ShiftRight: 0xA1, ControlLeft: 0xA2, ControlRight: 0xA3, AltLeft: 0xA4, AltRight: 0xA5,
 	Semicolon: 0xBA, Equal: 0xBB, Comma: 0xBC, Minus: 0xBD, Period: 0xBE, Slash: 0xBF, Backquote: 0xC0, BracketLeft: 0xDB, Backslash: 0xDC, BracketRight: 0xDD,
 	Quote: 0xDE, IntlBackslash: 0xE2,
 };
@@ -601,9 +601,13 @@ if (!window.PlayGTA5Enhanced) {
 	// and U/O (target left/right) press the same keys for the engine; the real numpad keeps working.
 	const FLY_ALIAS = { KeyI: 'Numpad8', KeyK: 'Numpad2', KeyJ: 'Numpad4', KeyL: 'Numpad6', KeyU: 'Numpad7', KeyO: 'Numpad9' };
 	const held = new Set();
-	const syncFlyAlias = () => { for (const [src, target] of Object.entries(FLY_ALIAS)) Atomics.store(keys, VK[target], held.has(src) || held.has(target) ? 0x80 : 0); };
+	const syncFlyAlias = () => {
+		for (const [src, target] of Object.entries(FLY_ALIAS)) Atomics.store(keys, VK[target], held.has(src) || held.has(target) ? 0x80 : 0);
+		for (const name of ['Shift', 'Control', 'Alt']) Atomics.store(keys, VK[name], held.has(name + 'Left') || held.has(name + 'Right') ? 0x80 : 0);
+	};
+	const editing = e => e.target?.closest?.('input, textarea, select, [contenteditable="true"]');
 	addEventListener('keydown', (e) => {
-		if (passThrough(e)) return;
+		if (passThrough(e) || editing(e)) return;
 		e.preventDefault();
 		const vk = VK[e.code];
 		if (!e.repeat) trace('keydown ' + e.code + ' vk=' + (vk || 'UNMAPPED') + ' hasFocus=' + document.hasFocus() + ' engineFocus=' + Atomics.load(w, FOCUS));
@@ -624,19 +628,22 @@ if (!window.PlayGTA5Enhanced) {
 		if (vk) Atomics.store(keys, vk, 0);
 		held.delete(e.code); syncFlyAlias();
 	});
-	const releaseAll = () => { held.clear(); for (let i = 0; i < 256; i++) Atomics.store(keys, i, 0); Atomics.store(w, BTN, 0); };
+	const releaseAll = () => { held.clear(); for (let i = 0; i < 256; i++) Atomics.store(keys, i, 0); for (const i of [DX, DY, DZ, BTN]) Atomics.store(w, i, 0); };
+	document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseAll(); Atomics.store(w, FOCUS, 0); } else Atomics.store(w, FOCUS, document.hasFocus() ? 1 : 0); });
+	addEventListener('pagehide', releaseAll);
 	addEventListener('focus', () => { trace('window focus'); Atomics.store(w, FOCUS, 1); });
 	addEventListener('blur', () => { trace('window blur (all keys released)'); Atomics.store(w, FOCUS, 0); releaseAll(); });
 
 	const locked = () => document.pointerLockElement === canvas;
 	canvas.addEventListener('mousedown', (e) => {
+		canvas.focus({preventScroll:true});
 		if (!locked() && canvas.requestPointerLock && !matchMedia("(pointer:coarse)").matches) { Promise.resolve(canvas.requestPointerLock({ unadjustedMovement: true })).catch(() => Promise.resolve(canvas.requestPointerLock()).catch(() => {})); }
 		Atomics.or(w, BTN, 1 << [0, 2, 1, 3, 4][e.button]);
 		e.preventDefault();
 	});
 	addEventListener('mouseup', (e) => { Atomics.and(w, BTN, ~(1 << [0, 2, 1, 3, 4][e.button])); });
 	addEventListener('contextmenu', (e) => e.preventDefault());
-	document.addEventListener('pointerlockchange', () => { trace('pointer lock ' + (locked() ? 'on' : 'off')); Atomics.store(w, LOCKED, locked() ? 1 : 0); });
+	document.addEventListener('pointerlockchange', () => { trace('pointer lock ' + (locked() ? 'on' : 'off')); Atomics.store(w, LOCKED, locked() ? 1 : 0); if (!locked()) releaseAll(); });
 	addEventListener('mousemove', (e) => {
 		const r = canvas.getBoundingClientRect();
 		if (locked()) {
